@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pearson IAL 2026 考试日历与导出</title>
+
+<style>
+  :root {
+    --bg: #f0f4f8;
+    --surface: #ffffff;
+    --surface2: #f8fafc;
+    --border: #dde3ea;
+    --text: #1a2332;
+    --muted: #7a8899;
+    --physics: #1a3f7a;
+    --physics-bg: rgba(26,63,122,0.15);
+    --math: #dc2020;
+    --math-bg: rgba(220,32,32,0.15);
+    --economics: #c27d00;
+    --economics-bg: rgba(194,125,0,0.15);
+    --accounting: #ea580c;
+    --accounting-bg: rgba(234,88,12,0.15);
+    --am: #b45309;
+    --pm: #475569;
+    --primary: #0284c7;
+    --primary-hover: #0369a1;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  #app-wrapper { padding: 40px 24px; width: 100%; max-width: 1200px; margin: 0 auto; }
+
+  @media (max-width: 600px) {
+    #app-wrapper { padding: 24px 12px; }
+  }
+
+  header { text-align: center; margin-bottom: 32px; }
+  header h1 {
+    font-size: clamp(28px, 5vw, 48px);
+    letter-spacing: -0.5px;
+    background: linear-gradient(135deg, #1a2332 0%, #dc2020 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 8px;
+    font-weight: bold;
+  }
+  header p { color: var(--muted); font-size: 14px; font-weight: 300; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 20px; }
+
+  .action-btn {
+    background: var(--primary); color: white; border: none; padding: 12px 24px;
+    border-radius: 24px; font-size: 16px; font-weight: 600; cursor: pointer;
+    box-shadow: 0 4px 6px rgba(2, 132, 199, 0.2); transition: all 0.2s ease;
+  }
+  .action-btn:hover { background: var(--primary-hover); transform: translateY(-2px); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-bottom: 40px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--border); padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 500; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  .calendar { width: 100%; }
+  .month-section { margin-bottom: 48px; }
+  .month-header { font-size: 22px; color: var(--text); margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); letter-spacing: 1px; font-weight: bold; }
+
+  .calendar-scroll-wrapper { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 12px; box-shadow: 0 1px 8px rgba(0,0,0,0.06); }
+  
+  .calendar-grid { display: grid; grid-template-columns: repeat(5, minmax(130px, 1fr)); gap: 1px; background: var(--border); border-radius: 12px; overflow: hidden; min-width: 650px; border: 1px solid var(--border); }
+  .day-header { background: #f8fafc; text-align: center; padding: 10px 4px; font-size: 12px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); }
+  .day-cell { background: var(--surface); min-height: 120px; padding: 8px 6px; position: relative; }
+  .day-cell.empty { background: #fdfdfd; }
+  .day-num { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 8px; display: block; }
+  .day-cell.has-exam .day-num { color: var(--text); font-weight: 700; }
+
+  .exam-block { border-radius: 6px; padding: 6px; margin-bottom: 4px; font-size: 11px; line-height: 1.3; border-left: 3px solid; cursor: default; }
+  .exam-block.physics { background: var(--physics-bg); border-color: var(--physics); color: #1a3f7a; }
+  .exam-block.math { background: var(--math-bg); border-color: var(--math); color: #b91c1c; }
+  .exam-block.economics { background: var(--economics-bg); border-color: var(--economics); color: #92580a; }
+  .exam-block.accounting { background: var(--accounting-bg); border-color: var(--accounting); color: #c2410c; }
+
+  .exam-name { font-weight: 600; display: block; margin-bottom: 2px; }
+  .exam-time { display: flex; align-items: center; gap: 4px; opacity: 0.9; }
+  .time-badge { font-size: 9px; padding: 2px 4px; border-radius: 3px; font-weight: 700; letter-spacing: 0.5px; }
+  .time-badge.am-session { background: rgba(180,83,9,0.12); color: var(--am); }
+  .time-badge.pm-session { background: rgba(71,85,105,0.12); color: var(--pm); }
+  .exam-duration { font-size: 9px; opacity: 0.8; }
+
+  /* Modal 弹窗样式 */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
+  .modal-content { background: white; width: 90%; max-width: 600px; max-height: 85vh; border-radius: 16px; padding: 24px; display: flex; flex-direction: column; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
+  .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 12px; }
+  .modal-header h2 { font-size: 20px; color: var(--text); }
+  .close-btn { background: none; border: none; font-size: 24px; cursor: pointer; color: var(--muted); }
+  .exam-list-container { overflow-y: auto; flex: 1; margin-bottom: 16px; padding-right: 8px; }
+  .exam-checkbox-item { display: flex; align-items: center; padding: 10px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; cursor: pointer; }
+  .exam-checkbox-item input { margin-right: 12px; width: 18px; height: 18px; cursor: pointer; }
+  .exam-meta { flex: 1; }
+  .exam-meta-title { font-weight: 600; font-size: 14px; margin-bottom: 2px;}
+  .exam-meta-details { font-size: 12px; color: var(--muted); }
+  .modal-footer { display: flex; justify-content: flex-end; gap: 12px; border-top: 1px solid var(--border); padding-top: 16px; }
+  .btn-outline { background: white; border: 1px solid var(--border); padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; }
+  .btn-primary { background: var(--primary); color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; }
+
+  /* === 打印专用 CSS (关键) === */
+  #print-container { display: none; }
+  
+  @media print {
+    /* 强迫浏览器打印彩色背景和边框 */
+    * { 
+      -webkit-print-color-adjust: exact !important; 
+      print-color-adjust: exact !important; 
+    }
+    
+    @page { margin: 10mm; size: A4 portrait; }
+    
+    body { background: white; }
+    
+    /* 隐藏所有网页操作元素 */
+    #app-wrapper, .modal-overlay { display: none !important; }
+    
+    /* 显示打印模板 */
+    #print-container { 
+      display: block !important; 
+      width: 100%;
+      color: black;
+    }
+    
+    /* 表格排版 */
+    .pdf-title { text-align: center; font-size: 24px; font-weight: bold; margin-bottom: 20px; color: #000; }
+    .pdf-subtitle { font-size: 18px; font-weight: bold; margin-bottom: 12px; border-bottom: 2px solid #ccc; padding-bottom: 6px; margin-top: 24px; color: #000; }
+    
+    .pdf-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px; }
+    .pdf-table th, .pdf-table td { border: 1px solid #aaa; padding: 10px; text-align: left; }
+    .pdf-table th { background: #f0f0f0; font-weight: bold; }
+    .pdf-table tr { page-break-inside: avoid; }
+    
+    /* 日历打印排版：强行解除横向滚动，适应页面宽度 */
+    .calendar-scroll-wrapper { overflow: visible !important; box-shadow: none !important; }
+    .calendar-grid { min-width: 100% !important; border: 1px solid #ccc; }
+    .month-section { page-break-inside: avoid; margin-bottom: 30px; }
+    
+    .page-break { page-break-before: always; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app-wrapper">
+  <header>
+    <h1>Pearson IAL 2026</h1>
+    <p>5月 / 6月 大考时间表</p>
+    <button class="action-btn" onclick="openModal()">+ 生成专属考试表格 / PDF</button>
+  </header>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--physics)"></div> 物理</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--math)"></div> 数学</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--economics)"></div> 经济学</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accounting)"></div> 会计学</div>
+  </div>
+
+  <div class="calendar" id="main-calendar"></div>
+</div>
+
+<div class="modal-overlay" id="examModal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>选择你要参加的考试</h2>
+      <button class="close-btn" onclick="closeModal()">&times;</button>
+    </div>
+    <div style="margin-bottom: 12px;">
+        <button class="btn-outline" style="padding: 6px 12px; font-size: 12px;" onclick="selectAll(true)">全选</button>
+        <button class="btn-outline" style="padding: 6px 12px; font-size: 12px;" onclick="selectAll(false)">清空</button>
+    </div>
+    <div class="exam-list-container" id="examCheckboxes"></div>
+    <div class="modal-footer">
+      <button class="btn-outline" onclick="closeModal()">取消</button>
+      <button class="btn-primary" onclick="generatePDF()">确认生成 PDF</button>
+    </div>
+  </div>
+</div>
+
+<div id="print-container">
+  <div class="pdf-title">My IAL 2026 Exam Schedule</div>
+  
+  <div class="pdf-subtitle">Part 1: 考试信息列表 (List View)</div>
+  <table class="pdf-table" id="pdf-table">
+    <thead>
+      <tr>
+        <th>日期 (Date)</th>
+        <th>时间 (Time)</th>
+        <th>科目 (Subject)</th>
+        <th>考试代码与名称 (Paper)</th>
+        <th>时长 (Duration)</th>
+      </tr>
+    </thead>
+    <tbody id="print-table-body"></tbody>
+  </table>
+
+  <div class="pdf-subtitle page-break">Part 2: 考试日历 (Calendar View)</div>
+  <div id="print-calendar-container" class="calendar"></div>
+</div>
+
+<script>
+const allExams = [
+  { date: '2026-05-05', subject: 'accounting', code: 'WAC11A', name: 'Accounting U1', time: '13:00', duration: '3h 00m' },
+  { date: '2026-05-07', subject: 'math', code: 'WME01A', name: 'M1: Mechanics 1', time: '13:00', duration: '1h 30m' },
+  { date: '2026-05-07', subject: 'economics', code: 'WEC11A', name: 'Econ U1: Markets', time: '16:00', duration: '1h 45m' },
+  { date: '2026-05-08', subject: 'physics', code: 'WPH11A', name: 'Phys U1: Mechanics', time: '16:00', duration: '1h 30m' },
+  { date: '2026-05-08', subject: 'math', code: 'WMA11A', name: 'P1: Pure Maths 1', time: '13:00', duration: '1h 30m' },
+  { date: '2026-05-12', subject: 'math', code: 'WMA12A', name: 'P2: Pure Maths 2', time: '13:00', duration: '1h 30m' },
+  { date: '2026-05-13', subject: 'physics', code: 'WPH12A', name: 'Phys U2: Waves & Elec', time: '16:00', duration: '1h 30m' },
+  { date: '2026-05-13', subject: 'economics', code: 'WEC12A', name: 'Econ U2: Macro', time: '13:00', duration: '1h 45m' },
+  { date: '2026-05-14', subject: 'math', code: 'WDM11A', name: 'D1: Decision Maths 1', time: '13:00', duration: '1h 30m' },
+  { date: '2026-05-18', subject: 'physics', code: 'WPH13A', name: 'Phys U3: Practical I', time: '13:00', duration: '1h 20m' },
+  { date: '2026-05-19', subject: 'math', code: 'WST01A', name: 'S1: Statistics 1', time: '13:00', duration: '1h 30m' },
+  { date: '2026-05-20', subject: 'accounting', code: 'WAC12A', name: 'Accounting U2', time: '13:00', duration: '3h 00m' },
+  { date: '2026-05-21', subject: 'math', code: 'WFM01A', name: 'FP1: Further Pure 1', time: '16:00', duration: '1h 30m' },
+  { date: '2026-05-21', subject: 'economics', code: 'WEC13A', name: 'Econ U3: Business', time: '13:00', duration: '2h 00m' },
+  { date: '2026-06-01', subject: 'physics', code: 'WPH14A', name: 'Phys U4: Fields', time: '13:00', duration: '1h 45m' },
+  { date: '2026-06-01', subject: 'math', code: 'WFM02A', name: 'FP2: Further Pure 2', time: '16:00', duration: '1h 30m' },
+  { date: '2026-06-02', subject: 'math', code: 'WMA13A', name: 'P3: Pure Maths 3', time: '13:00', duration: '1h 30m' },
+  { date: '2026-06-03', subject: 'math', code: 'WME02A', name: 'M2: Mechanics 2', time: '16:00', duration: '1h 30m' },
+  { date: '2026-06-04', subject: 'economics', code: 'WEC14A', name: 'Econ U4: Global Econ', time: '16:00', duration: '2h 00m' },
+  { date: '2026-06-05', subject: 'physics', code: 'WPH15A', name: 'Phys U5: Thermo', time: '13:00', duration: '1h 45m' },
+  { date: '2026-06-05', subject: 'math', code: 'WST02A', name: 'S2: Statistics 2', time: '16:00', duration: '1h 30m' },
+  { date: '2026-06-09', subject: 'math', code: 'WMA14A', name: 'P4: Pure Maths 4', time: '13:00', duration: '1h 30m' },
+  { date: '2026-06-10', subject: 'physics', code: 'WPH16A', name: 'Phys U6: Practical II', time: '13:00', duration: '1h 20m' },
+  { date: '2026-06-10', subject: 'math', code: 'WFM03A', name: 'FP3: Further Pure 3', time: '16:00', duration: '1h 30m' },
+  { date: '2026-06-11', subject: 'math', code: 'WME03A', name: 'M3: Mechanics 3', time: '16:00', duration: '1h 30m' },
+  { date: '2026-06-12', subject: 'math', code: 'WST03A', name: 'S3: Statistics 3', time: '16:00', duration: '1h 30m' },
+];
+
+function buildMonth(year, month, title, dataList) {
+  const examsByDate = {};
+  dataList.forEach(e => {
+    const d = new Date(e.date);
+    if (d.getFullYear() === year && d.getMonth() === month) {
+      const key = d.getDate();
+      if (!examsByDate[key]) examsByDate[key] = [];
+      examsByDate[key].push(e);
+    }
+  });
+
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const days = ['周一','周二','周三','周四','周五'];
+
+  let html = `<div class="month-section">
+    <div class="month-header">${title}</div>
+    <div class="calendar-scroll-wrapper"><div class="calendar-grid">`;
+
+  days.forEach(d => html += `<div class="day-header">${d}</div>`);
+
+  const weekdayCells = [];
+  const firstDow = new Date(year, month, 1).getDay();
+  const firstMonOffset = (firstDow + 6) % 7; 
+
+  const leadingEmpties = Math.min(firstMonOffset, 5);
+  for (let i = 0; i < leadingEmpties; i++) weekdayCells.push(0);
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dow = new Date(year, month, day).getDay();
+    if (dow >= 1 && dow <= 5) weekdayCells.push(day);
+  }
+
+  while (weekdayCells.length % 5 !== 0) weekdayCells.push(0);
+
+  let hasAnyExamInMonth = false;
+
+  weekdayCells.forEach(day => {
+    if (day === 0) {
+      html += `<div class="day-cell empty"></div>`;
+    } else {
+      const dayExams = examsByDate[day] || [];
+      if(dayExams.length > 0) hasAnyExamInMonth = true;
+      dayExams.sort((a, b) => a.time.localeCompare(b.time));
+      html += `<div class="day-cell ${dayExams.length ? 'has-exam' : ''}">
+        <span class="day-num">${day}</span>`;
+      dayExams.forEach(e => {
+        const isPM = e.time === '16:00';
+        html += `<div class="exam-block ${e.subject}">
+          <span class="exam-name">${e.name}</span>
+          <div class="exam-time">
+            <span class="time-badge ${isPM ? 'pm-session' : 'am-session'}">${e.time}</span>
+            <span class="exam-duration">${e.duration}</span>
+          </div>
+        </div>`;
+      });
+      html += `</div>`;
+    }
+  });
+
+  html += `</div></div></div>`;
+  if (!hasAnyExamInMonth && dataList.length !== allExams.length) return '';
+  return html;
+}
+
+function renderMainCalendar() {
+  const cal = document.getElementById('main-calendar');
+  cal.innerHTML = buildMonth(2026, 4, '2026年 5月', allExams) + buildMonth(2026, 5, '2026年 6月', allExams);
+}
+renderMainCalendar();
+
+function openModal() {
+  const container = document.getElementById('examCheckboxes');
+  container.innerHTML = ''; 
+  const sortedExams = [...allExams].sort((a, b) => new Date(a.date) - new Date(b.date));
+  sortedExams.forEach((exam) => {
+    container.innerHTML += `
+      <label class="exam-checkbox-item">
+        <input type="checkbox" value="${exam.code}" class="exam-selector">
+        <div class="exam-meta">
+          <div class="exam-meta-title">${exam.name} (${exam.code})</div>
+          <div class="exam-meta-details">${exam.date} | ${exam.time} | ${exam.duration}</div>
+        </div>
+      </label>
+    `;
+  });
+  document.getElementById('examModal').style.display = 'flex';
+}
+
+function closeModal() {
+  document.getElementById('examModal').style.display = 'none';
+}
+
+function selectAll(check) {
+  const checkboxes = document.querySelectorAll('.exam-selector');
+  checkboxes.forEach(cb => cb.checked = check);
+}
+
+// === 全新生成逻辑：抛弃截图，直接调用系统打印 ===
+function generatePDF() {
+  const selectedCodes = Array.from(document.querySelectorAll('.exam-selector:checked')).map(cb => cb.value);
+  if (selectedCodes.length === 0) {
+    alert("请至少选择一门考试！");
+    return;
+  }
+  const selectedExams = allExams.filter(exam => selectedCodes.includes(exam.code));
+  
+  // 1. 注入数据到打印表格
+  const tbody = document.getElementById('print-table-body');
+  tbody.innerHTML = '';
+  selectedExams.sort((a, b) => {
+    if (a.date === b.date) return a.time.localeCompare(b.time);
+    return new Date(a.date) - new Date(b.date);
+  });
+  selectedExams.forEach(exam => {
+    tbody.innerHTML += `
+      <tr>
+        <td>${exam.date}</td>
+        <td>${exam.time}</td>
+        <td style="text-transform: capitalize;">${exam.subject}</td>
+        <td><strong>${exam.code}</strong> - ${exam.name}</td>
+        <td>${exam.duration}</td>
+      </tr>
+    `;
+  });
+  
+  // 2. 注入数据到打印日历
+  const printCal = document.getElementById('print-calendar-container');
+  printCal.innerHTML = buildMonth(2026, 4, '2026年 5月', selectedExams) + buildMonth(2026, 5, '2026年 6月', selectedExams);
+  
+  // 关闭弹窗
+  closeModal();
+  
+  // 3. 唤起原生打印，CSS 会自动隐藏主界面，只显示打印模板
+  // 给一点延迟让 DOM 渲染完毕
+  setTimeout(() => {
+    window.print();
+  }, 300);
+}
+</script>
+
+</body>
+</html>
